@@ -4,12 +4,22 @@ import { UserIngredient } from "./IngredientManager";
 
 type Props = {
   ingredients: UserIngredient[];
+  activeCategory: string; // 1. Agregamos esta propiedad aquí
 };
 
 export default function ApiRecipeList({
-  ingredients,
+  ingredients = [],
+  activeCategory = "todos", // 2. La recibimos aquí con un valor por defecto
 }: Props) {
-  const recipeMatches = recipes.map((recipe) => {
+  
+  // 3. Agregamos el filtro por categorías antes de calcular los porcentajes
+  const filteredRecipes = recipes.filter((recipe) => {
+    if (activeCategory === "todos") return true;
+    return recipe.category === activeCategory;
+  });
+
+  // 4. Cambiamos 'recipes.map' por 'filteredRecipes.map'
+  const recipeMatches = filteredRecipes.map((recipe) => {
     // Guardamos explícitamente cuáles faltan
     const missingIngredients: string[] = [];
 
@@ -30,6 +40,7 @@ export default function ApiRecipeList({
         return true;
       }
     );
+
 
     const percentage = Math.round(
       (matchingIngredients.length / recipe.ingredients.length) * 100
