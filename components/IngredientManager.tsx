@@ -9,6 +9,44 @@ export type UserIngredient = {
   quantity: number;
 };
 
+// FUNCIÓN UTILITARIA: Comprime y redimensiona imágenes del lado del cliente antes de enviarlas
+const compressImage = (file: File, maxWidth = 1024, quality = 0.7): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        let width = img.width;
+        let height = img.height;
+
+        // Redimensionar proporcionalmente si supera el ancho máximo
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return reject(new Error("No se pudo obtener el contexto del Canvas"));
+        
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // Convertir a base64 con compresión JPEG
+        const compressedBase64 = canvas.toDataURL("image/jpeg", quality);
+        // Retornamos solo la cadena de datos pura (sin el prefijo "data:image/jpeg;base64,")
+        resolve(compressedBase64.split(",")[1]);
+      };
+      img.onerror = (err) => reject(err);
+    };
+    reader.onerror = (err) => reject(err);
+  });
+};
+
 const quickIngredients = [
   { emoji: "🥚", name: "huevo" },
   { emoji: "🍅", name: "tomate" },
@@ -27,9 +65,16 @@ export default function IngredientManager() {
   const [quantityInput, setQuantityInput] = useState("");
   const [ingredients, setIngredients] = useState<UserIngredient[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>("todos");
-  
-  // Nuevo estado para mostrar una animación mientras la Inteligencia Artificial trabaja
   const [isScanning, setIsScanning] = useState(false);
+
+  // NUEVO: Estado para controlar las notificaciones flotantes estéticas (Toasts)
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
+
+  // Función utilitaria para lanzar la alerta visual y que se cierre sola
+  const showToast = (message: string, type: "success" | "error" | "info" = "success") => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3500); // Se oculta automáticamente a los 3.5 segundos
+  };
 
   useEffect(() => {
     const savedIngredients = localStorage.getItem("ingredients");
@@ -37,7 +82,6 @@ export default function IngredientManager() {
       setIngredients(JSON.parse(savedIngredients));
     }
   }, []);
-
   // Función estrella: Lee el archivo de imagen, lo procesa y llama a la API de Gemini
   const handleScanImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -45,64 +89,63 @@ export default function IngredientManager() {
 
     setIsScanning(true);
 
-    const reader = new FileReader();
-    reader.onloadend = async () => {
-      try {
-        // Extraemos la cadena base64 de la imagen quitándole el encabezado
-        const base64String = (reader.result as string).split(",")[1];
+    try {
+      // 1. Comprimimos la imagen y obtenemos el Base64 limpio directamente
+      const base64String = await compressImage(file);
 
-        // Enviamos la imagen a la ruta de API de Next.js que creamos en el paso anterior
-        const response = await fetch("/api/scan", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ imageBase64: base64String }),
-        });
+      // 2. Enviamos la imagen comprimida a la ruta de API de Next.js
+      const response = await fetch("/api/scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageBase64: base64String }),
+      });
 
-        const data = await response.json();
+      const data = await response.json();
 
-        if (data.error) {
-          alert(data.error);
-          setIsScanning(false);
-          return;
-        }
-
-        if (data.ingredients && data.ingredients.length > 0) {
-          // Fusionamos los ingredientes existentes con los nuevos que detectó la IA
-          setIngredients((prev) => {
-            const updated = [...prev];
-            data.ingredients.forEach((newIng: UserIngredient) => {
-              const exists = updated.some(
-                (i) => i.name.toLowerCase() === newIng.name.toLowerCase()
-              );
-              if (!exists) {
-                updated.push({
-                  name: newIng.name.toLowerCase(),
-                  quantity: newIng.quantity || 1,
-                });
-              }
-            });
-            return updated;
-          });
-          alert(`¡Éxito! La IA detectó e integró ${data.ingredients.length} ingredientes.`);
-        } else {
-          alert("La IA completó el análisis pero no logró reconocer ningún alimento claro.");
-        }
-      } catch (err) {
-        console.error("Error al escanear:", err);
-        alert("Ocurrió un fallo en la comunicación con el servidor de Inteligencia Artificial.");
-      } finally {
+      if (data.error) {
+        showToast(data.error, "error");
         setIsScanning(false);
+        return;
       }
-    };
-    reader.readAsDataURL(file);
+
+      if (data.ingredients && data.ingredients.length > 0) {
+        // Fusionamos los ingredientes existentes con los nuevos que detectó la IA
+        setIngredients((prev) => {
+          const updated = [...prev];
+          data.ingredients.forEach((newIng: UserIngredient) => {
+            const exists = updated.some(
+              (i) => i.name.toLowerCase() === newIng.name.toLowerCase()
+            );
+            if (!exists) {
+              updated.push({
+                name: newIng.name.toLowerCase(),
+                quantity: newIng.quantity || 1,
+              });
+            }
+          });
+          return updated;
+        });
+        showToast(`¡Éxito! La IA integró ${data.ingredients.length} ingredientes.`, "success");
+      } else {
+        showToast("La IA no logró reconocer ningún alimento claro.", "info");
+      }
+    } catch (err) {
+      console.error("Error al escanear:", err);
+      showToast("Fallo en la comunicación con el servidor de IA.", "error");
+    } finally {
+      setIsScanning(false);
+    }
   };
+
   const saveIngredients = () => {
     localStorage.setItem("ingredients", JSON.stringify(ingredients));
+    showToast("¡Heladera guardada correctamente!", "success");
   };
 
   const clearIngredients = () => {
     setIngredients([]);
     localStorage.removeItem("ingredients");
+    showToast("Se vació la heladera", "info");
   };
 
   const addIngredient = () => {
@@ -112,11 +155,15 @@ export default function IngredientManager() {
     const quantity = Number(quantityInput) || 1;
     const exists = ingredients.some((i) => i.name === ingredient);
 
-    if (exists) return;
+    if (exists) {
+      showToast("Ese ingrediente ya está en tu heladera", "info");
+      return;
+    }
 
     setIngredients([...ingredients, { name: ingredient, quantity }]);
     setIngredientInput("");
     setQuantityInput("");
+    showToast(`Añadido: ${ingredient}`, "success");
   };
 
   const removeIngredient = (ingredientName: string) => {
@@ -128,6 +175,7 @@ export default function IngredientManager() {
     if (alreadyExists) return;
 
     setIngredients([...ingredients, { name: ingredientName, quantity: 1 }]);
+    showToast(`Añadido: ${ingredientName}`, "success");
   };
   return (
     <div className="max-w-5xl mx-auto p-4 md:p-8 space-y-6 animate-fade-in">
@@ -152,7 +200,7 @@ export default function IngredientManager() {
           </h2>
           
           <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
-            {/* NUEVO: Botón de Escáner por Imagen con IA Inteligente */}
+            {/* Botón de Escáner por Imagen con IA Inteligente */}
             <label className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm shadow-md transition-all cursor-pointer active:scale-95 ${
               isScanning 
                 ? "bg-slate-100 text-slate-400 cursor-not-allowed" 
@@ -162,7 +210,7 @@ export default function IngredientManager() {
               <input
                 type="file"
                 accept="image/*"
-                capture="environment" // Abre directamente la cámara trasera en dispositivos móviles
+                capture="environment"
                 onChange={handleScanImage}
                 disabled={isScanning}
                 className="hidden"
@@ -242,7 +290,6 @@ export default function IngredientManager() {
             ➕ Agregar
           </button>
         </div>
-
         {/* Sección de Ingredientes Cargados */}
         {ingredients.length > 0 && (
           <div className="bg-slate-50/70 border border-slate-100 rounded-2xl p-5 mb-6">
@@ -303,35 +350,57 @@ export default function IngredientManager() {
 
       </div>
 
-      {/* Selectores Visuales de Categorías */}
-<div className="bg-white border border-slate-100 shadow-md rounded-2xl p-4 flex flex-wrap justify-center gap-2">
-  {[
-    { id: "todos", label: "🍽️ Todo", color: "bg-slate-900 text-white" },
-    { id: "desayuno", label: "☕ Desayuno", color: "bg-amber-500 text-white" },
-    { id: "almuerzo", label: "☀️ Almuerzo", color: "bg-orange-500 text-white" },
-    { id: "merienda", label: "🍰 Merienda", color: "bg-pink-500 text-white" },
-    { id: "cena", label: "🌙 Cena", color: "bg-indigo-900 text-white" }
-  ].map((cat) => {
-    const isActive = selectedCategory === cat.id;
-    return (
-      <button
-        key={cat.id}
-        onClick={() => setSelectedCategory(cat.id)}
-        className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 duration-200 ${
-          isActive 
-            ? `\${cat.color} shadow-lg ring-4 ring-offset-2 ring-slate-200` 
-            : "bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-800"
-        }`}
-      >
-        {cat.label}
-      </button>
-    );
-  })}
-</div>
-
+      {/* Selectores Visuales de Categorías (CORREGIDO) */}
+      <div className="bg-white border border-slate-100 shadow-md rounded-2xl p-4 flex flex-wrap justify-center gap-2">
+        {[
+          { id: "todos", label: "🍽️ Todo", color: "bg-slate-900 text-white" },
+          { id: "desayuno", label: "☕ Desayuno", color: "bg-amber-500 text-white" },
+          { id: "almuerzo", label: "☀️ Almuerzo", color: "bg-orange-500 text-white" },
+          { id: "merienda", label: "🍰 Merienda", color: "bg-pink-500 text-white" },
+          { id: "cena", label: "🌙 Cena", color: "bg-indigo-900 text-white" }
+        ].map((cat) => {
+          const isActive = selectedCategory === cat.id;
+          return (
+            <button
+              key={cat.id}
+              onClick={() => setSelectedCategory(cat.id)}
+              className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 duration-200 ${
+                isActive 
+                  ? `\${cat.color} shadow-lg ring-4 ring-offset-2 ring-slate-200` 
+                  : "bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-800"
+              }`}
+            >
+              {cat.label}
+            </button>
+          );
+        })}
+      </div>
 
       {/* Lista de Recetas Local Estable */}
       <ApiRecipeList ingredients={ingredients} activeCategory={selectedCategory} />
+
+      {/* COMPONENTE VISUAL FLOTANTE: Notificaciones Estéticas (Toasts) */}
+      {toast && (
+        <div className="fixed top-5 right-5 z-50 animate-slide-up max-w-sm w-full bg-white rounded-2xl shadow-2xl border border-slate-100 p-4 flex items-center gap-3 ring-1 ring-slate-900/5">
+          <div className={`p-2 rounded-xl shrink-0 text-xl ${
+            toast.type === "success" ? "bg-green-50 text-green-600" :
+            toast.type === "error" ? "bg-red-50 text-red-600" : "bg-amber-50 text-amber-600"
+          }`}>
+            {toast.type === "success" ? "✨" : toast.type === "error" ? "❌" : "⚠️"}
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-bold text-slate-800">
+              {toast.type === "success" ? "¡Operación Exitosa!" : toast.type === "error" ? "Hubo un problema" : "Aviso de la App"}
+            </p>
+            <p className="text-xs text-slate-500 font-medium mt-0.5 leading-snug">
+              {toast.message}
+            </p>
+          </div>
+          <button onClick={() => setToast(null)} className="text-slate-400 hover:text-slate-600 text-xs font-bold px-1">
+            ✕
+          </button>
+        </div>
+      )}
 
     </div>
   );
