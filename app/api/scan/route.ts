@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
       try {
         // 3. Consulta a la API utilizando el modelo de producción masivo y estable
         response = await ai.models.generateContent({
-          model: "gemini-1.5-flash", // <-- CORREGIDO: Modelo oficial súper estable
+          model: "gemini-2.5-flash", // <-- CORREGIDO: Modelo oficial súper estable
           contents: [
             prompt,
             {
