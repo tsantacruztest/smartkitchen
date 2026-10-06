@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenAI, Type } from "@google/genai";
 
+// 1. Importamos tu lista oficial de ingredientes para que la IA la use como diccionario corrector
+import { ingredientsList } from "@/lib/ingredients";
+
 export async function POST(req: NextRequest) {
   try {
-    // 1. Verificación e inicialización dinámica de la clave de API de Google
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) {
       console.error("Error crítico: La variable GEMINI_API_KEY no está configurada en Vercel.");
@@ -15,7 +17,6 @@ export async function POST(req: NextRequest) {
 
     const ai = new GoogleGenAI({ apiKey });
 
-    // 2. Extracción segura de la imagen enviada por el cliente
     const data = await req.json();
     const { imageBase64 } = data;
 
@@ -26,21 +27,27 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const prompt = `
-      Actúa como un extractor experto de ingredientes de cocina. 
-      Analiza detalladamente la imagen proporcionada (puede ser una foto de una heladera, ingredientes sueltos sobre la mesa o un ticket impreso de compra del supermercado).
-      
-      Debes identificar todos los ingredientes alimenticios comestibles y devolverlos en una lista JSON estructurada.
-      
-      Reglas estrictas de extracción:
-      1. Traduce o escribe todos los nombres de los ingredientes en ESPAÑOL, en minúsculas y en singular (ej. si dice 'tomates', extrae 'tomate').
-      2. Si es un ticket de compra, ignora los precios, códigos de barra, fechas, marcas de limpieza y nombres de tiendas. Extrae únicamente los alimentos.
-      3. Para las cantidades, haz una estimación razonable si es una foto. Si es un ticket, extrae la cantidad comprada. Si no se puede deducir, pon 1 de forma predeterminada.
-    `;
+    // Convertimos tu lista de ingredientes en un texto legible para la IA
+    const listaOficialTexto = ingredientsList.join(", ");
 
-    // 3. Consulta a la API de Google utilizando el modelo oficial para usuarios nuevos
+    // 2. MEJORA DEL PROMPT: Le entregamos la lista oficial y le ordenamos normalizar los datos
+    const prompt = `
+      Actúa como un extractor experto de ingredientes de cocina y un normalizador de datos estricto.
+      Analiza detalladamente la imagen proporcionada (foto de heladera, alacena o un ticket de supermercado).
+      
+      Debes identificar todos los alimentos comestibles y devolverlos en una lista JSON estructurada.
+      
+      REGLAS DE EXTRACCIÓN Y NORMALIZACIÓN ABSOLUTAS:
+      1. COMPARACIÓN OBLIGATORIA: Te proporciono una lista de ingredientes oficiales válidos en nuestra aplicación: [${listaOficialTexto}].
+         Cada vez que identifiques un alimento en la imagen o ticket, debes buscar su equivalente exacto o más cercano en esa lista oficial.
+         - Si el ticket dice abreviaturas o marcas (ej. "tmt perita", "puré arcor", "pllo trozado"), debes transformarlo e inyectarlo usando el término exacto de la lista oficial (ej. "tomate", "puré de tomate", "pollo").
+         - Escribe los nombres estrictamente en ESPAÑOL, en minúsculas y en singular.
+      2. EXCLUSIÓN: Si es un ticket de compra, ignora por completo los precios, subtotales, fechas, números de sucursal, productos de limpieza (ej. detergente, champú), bolsas y marcas de consumo no comestibles. Extrae ÚNICAMENTE alimentos.
+      3. CANTIDADES: Si es un ticket, lee la cantidad comprada que figura al inicio de la línea. Si es una foto de heladera, haz una estimación lógica. Si no se puede deducir, coloca 1 por defecto.
+    `;
+    // 3. Consulta a la API de Google utilizando el modelo oficial configurado
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash", 
+      model: "gemini-3.5-flash",
       contents: [
         prompt,
         {
@@ -57,17 +64,17 @@ export async function POST(req: NextRequest) {
           properties: {
             ingredients: {
               type: Type.ARRAY,
-              description: "Lista de ingredientes detectados en la imagen",
+              description: "Lista de ingredientes detectados y normalizados según el diccionario oficial",
               items: {
                 type: Type.OBJECT,
                 properties: {
                   name: {
                     type: Type.STRING,
-                    description: "Nombre del ingrediente en español, minúsculas y singular. Ej: 'tomate', 'pollo', 'leche'.",
+                    description: "Nombre del ingrediente mapeado obligatoriamente a la lista oficial provista.",
                   },
                   quantity: {
                     type: Type.INTEGER,
-                    description: "Cantidad estimada o leída del ingrediente. Si no se sabe, 1.",
+                    description: "Cantidad extraída o estimada del alimento.",
                   },
                 },
                 required: ["name", "quantity"],
