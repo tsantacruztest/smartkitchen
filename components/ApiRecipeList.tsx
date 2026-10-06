@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { recipes } from "@/lib/recipes";
 import { UserIngredient } from "./IngredientManager";
-import Image from "next/image";
 
 type Props = {
   ingredients: UserIngredient[];
@@ -20,7 +19,7 @@ export default function ApiRecipeList({
   // 1. Filtramos las recetas según la categoría seleccionada
   const filteredRecipes = recipes.filter((recipe) => {
     if (activeCategory === "todos") return true;
-    return recipe.category === activeCategory;
+return recipe.category?.toLowerCase() === activeCategory.toLowerCase();
   });
 
   // 2. Calculamos los porcentajes de ingredientes que posee el usuario
@@ -93,28 +92,28 @@ export default function ApiRecipeList({
           : "border-slate-100 bg-white"
       }`}
     >
-      {/* Contenedor de la Imagen Real */}
-      <div className="relative h-44 w-full bg-slate-50 overflow-hidden border-b border-slate-100">
-        <Image
-          src={recipe.image}
-          alt={recipe.name}
-          width={400}
-          height={250}
-          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-          loading="lazy"
-        />
-        <span
-          className={`absolute top-3 right-3 text-[11px] font-black px-2.5 py-1 rounded-full shadow-sm ${
-            recipe.percentage === 100
-              ? "bg-green-600 text-white"
-              : recipe.percentage >= 50
-              ? "bg-amber-500 text-white"
-              : "bg-slate-600 text-white"
-          }`}
-        >
-          {recipe.percentage}%
-        </span>
-      </div>
+      {/* Contenedor de Imagen Local con Placeholders de Color (Infalible) */}
+<div className={`relative h-44 w-full overflow-hidden border-b border-slate-100 flex items-center justify-center text-5xl select-none ${
+  recipe.category === "desayuno" ? "bg-amber-100" :
+  recipe.category === "almuerzo" ? "bg-orange-100" :
+  recipe.category === "merienda" ? "bg-pink-100" : "bg-indigo-100"
+}`}>
+  {/* Pintamos el emoji de la receta grande en el centro */}
+  <span>{recipe.image}</span>
+  
+  <span
+    className={`absolute top-3 right-3 text-[11px] font-black px-2.5 py-1 rounded-full shadow-sm ${
+      recipe.percentage === 100
+        ? "bg-green-600 text-white"
+        : recipe.percentage >= 50
+        ? "bg-amber-500 text-white"
+        : "bg-slate-600 text-white"
+    }`}
+  >
+    {recipe.percentage}%
+  </span>
+</div>
+
 
       {/* Información de la Receta */}
       <div className="p-4 space-y-2">
@@ -216,32 +215,33 @@ export default function ApiRecipeList({
           {/* Tarjeta de la Ventana Emergente */}
           <div className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl overflow-hidden relative z-10 flex flex-col max-h-[85vh] border border-slate-100 animate-slide-up">
             
-            {/* Cabecera con Imagen de Fondo */}
-            <div className="relative h-48 w-full bg-slate-100 shrink-0">
-              <img
-                src={selectedRecipe.image}
-                alt={selectedRecipe.name}
-                className="w-full h-full object-cover"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-950/20 to-transparent"></div>
-              
-              {/* Botón de Cerrar Flotante */}
-              <button
-                onClick={() => setSelectedRecipe(null)}
-                className="absolute top-4 right-4 bg-white/20 backdrop-blur-md text-white hover:bg-white/40 active:scale-95 transition rounded-full p-2 font-bold h-9 w-9 flex items-center justify-center text-lg"
-              >
-                ✕
-              </button>
+            {/* Cabecera con Fondo de Color y Emoji en la Modal */}
+<div className={`relative h-48 w-full shrink-0 flex items-center justify-center text-6xl ${
+  selectedRecipe.category === "desayuno" ? "bg-amber-100" :
+  selectedRecipe.category === "almuerzo" ? "bg-orange-100" :
+  selectedRecipe.category === "merienda" ? "bg-pink-100" : "bg-indigo-100"
+}`}>
+  <span>{selectedRecipe.image}</span>
+  <div className="absolute inset-0 bg-gradient-to-t from-slate-950/40 to-transparent"></div>
+  
+  {/* Botón de Cerrar Flotante */}
+  <button
+    onClick={() => setSelectedRecipe(null)}
+    className="absolute top-4 right-4 bg-white/20 backdrop-blur-md text-white hover:bg-white/40 active:scale-95 transition rounded-full p-2 font-bold h-9 w-9 flex items-center justify-center text-lg"
+  >
+    ✕
+  </button>
 
-              <div className="absolute bottom-4 left-6 right-6 text-white space-y-1">
-                <span className="text-[10px] font-black tracking-widest uppercase bg-green-600 px-2 py-0.5 rounded shadow-sm">
-                  {selectedRecipe.category}
-                </span>
-                <h3 className="text-xl md:text-2xl font-black capitalize drop-shadow">
-                  {selectedRecipe.name}
-                </h3>
-              </div>
-            </div>
+  <div className="absolute bottom-4 left-6 right-6 text-white space-y-1">
+    <span className="text-[10px] font-black tracking-widest uppercase bg-green-600 px-2 py-0.5 rounded shadow-sm">
+      {selectedRecipe.category}
+    </span>
+    <h3 className="text-xl md:text-2xl font-black capitalize drop-shadow-md">
+      {selectedRecipe.name}
+    </h3>
+  </div>
+</div>
+
 
             {/* Contenido Desplazable */}
             <div className="p-6 overflow-y-auto space-y-6">

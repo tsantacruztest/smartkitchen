@@ -304,30 +304,31 @@ export default function IngredientManager() {
       </div>
 
       {/* Selectores Visuales de Categorías */}
-      <div className="bg-white border border-slate-100 shadow-md rounded-2xl p-4 flex flex-wrap justify-center gap-2">
-        {[
-          { id: "todos", label: "🍽️ Todo", color: "bg-slate-900 text-white" },
-          { id: "desayuno", label: "☕ Desayuno", color: "bg-amber-500 text-white" },
-          { id: "almuerzo", label: "☀️ Almuerzo", color: "bg-orange-500 text-white" },
-          { id: "merienda", label: "🍰 Merienda", color: "bg-pink-500 text-white" },
-          { id: "cena", label: "🌙 Cena", color: "bg-indigo-900 text-white" }
-        ].map((cat) => {
-          const isActive = selectedCategory === cat.id;
-          return (
-            <button
-              key={cat.id}
-              onClick={() => setSelectedCategory(cat.id)}
-              className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 duration-200 ${
-                isActive 
-                  ? `\${cat.color} shadow-lg ring-4 ring-offset-2 ring-slate-200` 
-                  : "bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-800"
-              }`}
-            >
-              {cat.label}
-            </button>
-          );
-        })}
-      </div>
+<div className="bg-white border border-slate-100 shadow-md rounded-2xl p-4 flex flex-wrap justify-center gap-2">
+  {[
+    { id: "todos", label: "🍽️ Todo", color: "bg-slate-900 text-white" },
+    { id: "desayuno", label: "☕ Desayuno", color: "bg-amber-500 text-white" },
+    { id: "almuerzo", label: "☀️ Almuerzo", color: "bg-orange-500 text-white" },
+    { id: "merienda", label: "🍰 Merienda", color: "bg-pink-500 text-white" },
+    { id: "cena", label: "🌙 Cena", color: "bg-indigo-900 text-white" }
+  ].map((cat) => {
+    const isActive = selectedCategory === cat.id;
+    return (
+      <button
+        key={cat.id}
+        onClick={() => setSelectedCategory(cat.id)}
+        className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 duration-200 ${
+          isActive 
+            ? `\${cat.color} shadow-lg ring-4 ring-offset-2 ring-slate-200` 
+            : "bg-slate-50 text-slate-600 hover:bg-slate-100 hover:text-slate-800"
+        }`}
+      >
+        {cat.label}
+      </button>
+    );
+  })}
+</div>
+
 
       {/* Lista de Recetas Local Estable */}
       <ApiRecipeList ingredients={ingredients} activeCategory={selectedCategory} />
