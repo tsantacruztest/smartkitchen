@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
 
     // 3. Consulta a la API de Google utilizando el modelo de producción ultra estable
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash", // Modelo estándar oficial de producción para análisis visual masivo
+      model: "gemini-3.5-flash", // Modelo estándar oficial de producción para análisis visual masivo
       contents: [
         prompt,
         {
