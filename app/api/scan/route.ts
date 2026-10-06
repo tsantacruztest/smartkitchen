@@ -4,6 +4,9 @@ import { GoogleGenAI, Type } from "@google/genai";
 // 1. Importamos tu lista oficial de ingredientes para que la IA la use como diccionario corrector
 import { ingredientsList } from "@/lib/ingredients";
 
+// Función auxiliar para forzar una pausa en milisegundos de forma asíncrona
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 export async function POST(req: NextRequest) {
   try {
     const apiKey = process.env.GEMINI_API_KEY;
@@ -45,48 +48,68 @@ export async function POST(req: NextRequest) {
       2. EXCLUSIÓN: Si es un ticket de compra, ignora por completo los precios, subtotales, fechas, números de sucursal, productos de limpieza (ej. detergente, champú), bolsas y marcas de consumo no comestibles. Extrae ÚNICAMENTE alimentos.
       3. CANTIDADES: Si es un ticket, lee la cantidad comprada que figura al inicio de la línea. Si es una foto de heladera, haz una estimación lógica. Si no se puede deducir, coloca 1 por defecto.
     `;
-    // 3. Consulta a la API de Google utilizando el modelo oficial configurado
-    const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
-      contents: [
-        prompt,
-        {
-          inlineData: {
-            mimeType: "image/jpeg",
-            data: imageBase64,
-          },
-        },
-      ],
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            ingredients: {
-              type: Type.ARRAY,
-              description: "Lista de ingredientes detectados y normalizados según el diccionario oficial",
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  name: {
-                    type: Type.STRING,
-                    description: "Nombre del ingrediente mapeado obligatoriamente a la lista oficial provista.",
-                  },
-                  quantity: {
-                    type: Type.INTEGER,
-                    description: "Cantidad extraída o estimada del alimento.",
-                  },
-                },
-                required: ["name", "quantity"],
+    // Variables para el control de reintentos en producción
+    let response;
+    const maxRetries = 3;
+    let baseDelay = 1000; // Empezamos esperando 1 segundo si falla
+
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        // 3. Consulta a la API utilizando el modelo de producción masivo y estable
+        response = await ai.models.generateContent({
+          model: "gemini-1.5-flash", // <-- CORREGIDO: Modelo oficial súper estable
+          contents: [
+            prompt,
+            {
+              inlineData: {
+                mimeType: "image/jpeg",
+                data: imageBase64,
               },
             },
+          ],
+          config: {
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                ingredients: {
+                  type: Type.ARRAY,
+                  description: "Lista de ingredientes detectados y normalizados según el diccionario oficial",
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      name: {
+                        type: Type.STRING,
+                        description: "Nombre del ingrediente mapeado obligatoriamente a la lista oficial provista.",
+                      },
+                      quantity: {
+                        type: Type.INTEGER,
+                        description: "Cantidad extraída o estimada del alimento.",
+                      },
+                    },
+                    required: ["name", "quantity"],
+                  },
+                },
+              },
+              required: ["ingredients"],
+            },
           },
-          required: ["ingredients"],
-        },
-      },
-    });
+        });
 
-    const responseText = response.text;
+        // Si la consulta fue exitosa, rompemos el bucle de reintentos
+        break;
+      } catch (apiError: any) {
+        console.warn(`Intento ${i + 1} fallido por saturación externa de la API.`, apiError.message);
+        
+        // Si ya es el último intento, lanzamos el error hacia el catch principal
+        if (i === maxRetries - 1) throw apiError;
+        
+        // Espera incremental (backoff): 1s, luego 2s antes del último intento
+        await delay(baseDelay * (i + 1));
+      }
+    }
+
+    const responseText = response?.text;
     if (!responseText) {
       throw new Error("La IA no devolvió texto legible.");
     }
@@ -95,7 +118,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(parsedData);
 
   } catch (error: any) {
-    console.error("Error en la ruta de escaneo con Gemini en producción:", error);
+    console.error("Error final en la ruta de escaneo con Gemini en producción:", error);
     return NextResponse.json(
       { error: "La IA de Google está muy saturada en este momento. Por favor, intenta de nuevo en unos segundos." },
       { status: 500 }
