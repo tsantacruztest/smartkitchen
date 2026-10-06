@@ -1,15 +1,16 @@
 // 1. Forzar a Node.js a omitir la validación estricta de certificados SSL en desarrollo local
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 
-// 2. Importaciones únicas (Sin duplicados)
+// 2. Importaciones únicas
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenAI, Type } from "@google/genai";
 
-// 3. Inicializamos la Inteligencia Artificial utilizando la clave de .env.local
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-
 export async function POST(req: NextRequest) {
   try {
+    // CORRECCIÓN: Inicializamos la Inteligencia Artificial de Google aquí adentro, usando la clave de producción
+    const apiKey = process.env.GEMINI_API_KEY;
+    const ai = new GoogleGenAI({ apiKey });
+
     const data = await req.json();
     const { imageBase64 } = data;
 
@@ -32,9 +33,9 @@ export async function POST(req: NextRequest) {
       3. Para las cantidades, haz una estimación razonable si es una foto. Si es un ticket, extrae la cantidad comprada. Si no se puede deducir, pon 1 de forma predeterminada.
     `;
 
-        // Llamamos a la API de Google usando el nuevo modelo oficial solicitado
+    // Llamamos a la API de Google Gemini pasándole la imagen y las instrucciones con el modelo solicitado
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash", // <-- NOMBRE CORRECTO Y OFICIAL AQUÍ
+      model: "gemini-3.5-flash",
       contents: [
         prompt,
         {
@@ -44,14 +45,6 @@ export async function POST(req: NextRequest) {
           },
         },
       ],
-      // Todo el esquema JSON de configuración de abajo se queda exactamente igual...
-
-      // Todo el esquema de configuración de abajo se queda exactamente igual...
-
-      // La configuración del esquema JSON de abajo sigue exactamente igual...
-
-      // El resto del objeto de configuración ('config') sigue exactamente igual hacia abajo...
-
       config: {
         responseMimeType: "application/json",
         responseSchema: {
