@@ -26,9 +26,10 @@ export default function IngredientManager() {
   const [ingredientInput, setIngredientInput] = useState("");
   const [quantityInput, setQuantityInput] = useState("");
   const [ingredients, setIngredients] = useState<UserIngredient[]>([]);
-  
-  // Estado para controlar la categoría de comida seleccionada
   const [selectedCategory, setSelectedCategory] = useState<string>("todos");
+  
+  // Nuevo estado para mostrar una animación mientras la Inteligencia Artificial trabaja
+  const [isScanning, setIsScanning] = useState(false);
 
   useEffect(() => {
     const savedIngredients = localStorage.getItem("ingredients");
@@ -37,6 +38,64 @@ export default function IngredientManager() {
     }
   }, []);
 
+  // Función estrella: Lee el archivo de imagen, lo procesa y llama a la API de Gemini
+  const handleScanImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsScanning(true);
+
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      try {
+        // Extraemos la cadena base64 de la imagen quitándole el encabezado
+        const base64String = (reader.result as string).split(",")[1];
+
+        // Enviamos la imagen a la ruta de API de Next.js que creamos en el paso anterior
+        const response = await fetch("/api/scan", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ imageBase64: base64String }),
+        });
+
+        const data = await response.json();
+
+        if (data.error) {
+          alert(data.error);
+          setIsScanning(false);
+          return;
+        }
+
+        if (data.ingredients && data.ingredients.length > 0) {
+          // Fusionamos los ingredientes existentes con los nuevos que detectó la IA
+          setIngredients((prev) => {
+            const updated = [...prev];
+            data.ingredients.forEach((newIng: UserIngredient) => {
+              const exists = updated.some(
+                (i) => i.name.toLowerCase() === newIng.name.toLowerCase()
+              );
+              if (!exists) {
+                updated.push({
+                  name: newIng.name.toLowerCase(),
+                  quantity: newIng.quantity || 1,
+                });
+              }
+            });
+            return updated;
+          });
+          alert(`¡Éxito! La IA detectó e integró ${data.ingredients.length} ingredientes.`);
+        } else {
+          alert("La IA completó el análisis pero no logró reconocer ningún alimento claro.");
+        }
+      } catch (err) {
+        console.error("Error al escanear:", err);
+        alert("Ocurrió un fallo en la comunicación con el servidor de Inteligencia Artificial.");
+      } finally {
+        setIsScanning(false);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
   const saveIngredients = () => {
     localStorage.setItem("ingredients", JSON.stringify(ingredients));
   };
@@ -65,12 +124,11 @@ export default function IngredientManager() {
   };
 
   const addQuickIngredient = (ingredientName: string) => {
-    const exists = ingredients.some((i) => i.name === ingredientName);
-    if (exists) return;
+    const alreadyExists = ingredients.some((i) => i.name === ingredientName);
+    if (alreadyExists) return;
 
     setIngredients([...ingredients, { name: ingredientName, quantity: 1 }]);
   };
-
   return (
     <div className="max-w-5xl mx-auto p-4 md:p-8 space-y-6 animate-fade-in">
       
@@ -81,7 +139,7 @@ export default function IngredientManager() {
           <span>Smart Kitchen</span>
         </h1>
         <p className="text-base md:text-lg text-slate-600 max-w-md mx-auto font-medium">
-          Descubre recetas deliciosas con los ingredientes que ya tienes en casa.
+          Descubre recetas deliciosas con los ingredientes que ya tienes en casa o escanea una foto.
         </p>
       </div>
 
@@ -93,23 +151,50 @@ export default function IngredientManager() {
             <span>🧺</span> Mi Heladera
           </h2>
           
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={clearIngredients}
-              className="flex items-center justify-center gap-2 bg-slate-100 hover:bg-red-50 text-slate-600 hover:text-red-600 active:scale-95 px-4 py-2.5 rounded-xl font-semibold border border-slate-200 hover:border-red-200 transition text-sm shadow-sm"
-            >
-              🗑️ Limpiar Heladera
-            </button>
-            <button
-              onClick={saveIngredients}
-              className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white px-5 py-2.5 rounded-xl font-semibold shadow-md shadow-blue-200 transition text-sm"
-            >
-              💾 Guardar Estado
-            </button>
+          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+            {/* NUEVO: Botón de Escáner por Imagen con IA Inteligente */}
+            <label className={`flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm shadow-md transition-all cursor-pointer active:scale-95 ${
+              isScanning 
+                ? "bg-slate-100 text-slate-400 cursor-not-allowed" 
+                : "bg-purple-600 hover:bg-purple-700 text-white shadow-purple-200"
+            }`}>
+              <span>📸</span> {isScanning ? "Analizando..." : "Escanear Heladera / Ticket"}
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment" // Abre directamente la cámara trasera en dispositivos móviles
+                onChange={handleScanImage}
+                disabled={isScanning}
+                className="hidden"
+              />
+            </label>
+
+            <div className="flex gap-2">
+              <button
+                onClick={clearIngredients}
+                className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-slate-100 hover:bg-red-50 text-slate-600 hover:text-red-600 active:scale-95 px-4 py-2.5 rounded-xl font-semibold border border-slate-200 hover:border-red-200 transition text-sm shadow-sm"
+              >
+                🗑️ Limpiar
+              </button>
+              <button
+                onClick={saveIngredients}
+                className="flex-1 sm:flex-none flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white px-5 py-2.5 rounded-xl font-semibold shadow-md shadow-blue-200 transition text-sm"
+              >
+                💾 Guardar
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Formulario de Entrada */}
+        {/* Letrero de Carga de la IA Animado */}
+        {isScanning && (
+          <div className="bg-purple-50 border border-purple-200 text-purple-700 rounded-2xl p-4 text-center font-bold text-sm animate-pulse flex items-center justify-center gap-3 mb-6">
+            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-purple-700"></div>
+            La Inteligencia Artificial está leyendo tu imagen... Esto tomará unos segundos.
+          </div>
+        )}
+
+        {/* Formulario de Entrada Manual */}
         <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 mb-6">
           <div className="relative sm:col-span-6">
             <input
@@ -202,7 +287,7 @@ export default function IngredientManager() {
                   className={`
                     flex items-center justify-center gap-2
                     px-4 py-3 rounded-xl border-2 font-medium text-sm transition-all duration-200
-                    \${isAdded 
+                    ${isAdded 
                       ? "bg-slate-100 border-slate-200 text-slate-400 cursor-not-allowed opacity-60" 
                       : "bg-white border-slate-200 text-slate-700 hover:border-green-500 hover:bg-green-50/50 hover:shadow-sm active:scale-95"
                     }
@@ -219,7 +304,6 @@ export default function IngredientManager() {
       </div>
 
       {/* Selectores Visuales de Categorías */}
-            {/* Selectores Visuales de Categorías */}
       <div className="bg-white border border-slate-100 shadow-md rounded-2xl p-4 flex flex-wrap justify-center gap-2">
         {[
           { id: "todos", label: "🍽️ Todo", color: "bg-slate-900 text-white" },
@@ -245,7 +329,7 @@ export default function IngredientManager() {
         })}
       </div>
 
-      {/* Lista de Recetas (Le enviamos la categoría activa) */}
+      {/* Lista de Recetas Local Estable */}
       <ApiRecipeList ingredients={ingredients} activeCategory={selectedCategory} />
 
     </div>
