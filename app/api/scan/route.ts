@@ -1,16 +1,21 @@
-// 1. Forzar a Node.js a omitir la validación estricta de certificados SSL en desarrollo local
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-
-// 2. Importaciones únicas
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenAI, Type } from "@google/genai";
 
 export async function POST(req: NextRequest) {
   try {
-    // CORRECCIÓN: Inicializamos la Inteligencia Artificial de Google aquí adentro, usando la clave de producción
+    // 1. Verificación e inicialización dinámica de la clave de API de Google
     const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      console.error("Error crítico: La variable GEMINI_API_KEY no está configurada en Vercel.");
+      return NextResponse.json(
+        { error: "El servidor no tiene configuradas las credenciales de Inteligencia Artificial." },
+        { status: 500 }
+      );
+    }
+
     const ai = new GoogleGenAI({ apiKey });
 
+    // 2. Extracción segura de la imagen enviada por el cliente
     const data = await req.json();
     const { imageBase64 } = data;
 
@@ -33,9 +38,9 @@ export async function POST(req: NextRequest) {
       3. Para las cantidades, haz una estimación razonable si es una foto. Si es un ticket, extrae la cantidad comprada. Si no se puede deducir, pon 1 de forma predeterminada.
     `;
 
-    // Llamamos a la API de Google Gemini pasándole la imagen y las instrucciones con el modelo solicitado
+    // 3. Consulta a la API de Google utilizando el modelo de producción ultra estable
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: "gemini-2.5-flash", // Modelo estándar oficial de producción para análisis visual masivo
       contents: [
         prompt,
         {
@@ -83,7 +88,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(parsedData);
 
   } catch (error: any) {
-    console.error("Error en la ruta de escaneo con Gemini:", error);
+    console.error("Error en la ruta de escaneo con Gemini en producción:", error);
     return NextResponse.json(
       { error: "Hubo un error al procesar la imagen con Inteligencia Artificial." },
       { status: 500 }
